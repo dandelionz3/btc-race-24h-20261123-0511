@@ -27,14 +27,21 @@ function returnBpsAtMost(close: bigint, base: bigint, thresholdBps: number): boo
   return close * 10000n <= base * BigInt(10000 + thresholdBps);
 }
 
+/** Keep only the newest MAX_CLOSES closes; the entry ROC needs at most 61. */
+function trimCloses(): void {
+  if (closes.length > MAX_CLOSES) closes.splice(0, closes.length - MAX_CLOSES);
+}
+
 await runBars({
   onBatch(state: BarsState, _batch: Batch) {
     const bar = state.latest.get(SYMBOL);
     const close = bar === undefined ? null : BigInt(bar.c);
-    if (close === null) return [];
+    // A zero close carries no price information: skip the bar rather than
+    // letting the return math treat it as a -100% move.
+    if (close === null || close <= 0n) return [];
 
     closes.push(close);
-    if (closes.length > MAX_CLOSES) closes.splice(0, closes.length - MAX_CLOSES);
+    trimCloses();
 
     if (state.warmingUp) return [];
 
